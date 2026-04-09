@@ -436,6 +436,69 @@ pub fn bit_reverse(value: usize, bits: u32) -> usize {
 }
 
 // ---------------------------------------------------------------------------
+// Stride-based chain for 2D sweep (§11.1)
+// ---------------------------------------------------------------------------
+
+/// Build a circular pointer-chase chain with one element per stride-sized
+/// region, shuffled via Fisher-Yates.
+///
+/// Unlike [`build_chain`], this function is designed for the `(range, stride)`
+/// 2D sweep: it visits exactly `range / stride` positions spaced `stride`
+/// bytes apart, in a random order.  This works with any range/stride
+/// combination (no power-of-2 requirement).
+///
+/// Each position `i` is at byte offset `i * stride`, stored as an index into
+/// a `[usize]` buffer: `buf[i * (stride / word_size)]`.  The chain forms a
+/// single Hamiltonian cycle starting at position 0.
+///
+/// # Panics
+///
+/// - `stride` must be a multiple of `size_of::<usize>()`.
+/// - `range / stride` must be ≥ 2 (at least two positions to form a cycle).
+/// - `range` must be ≤ `buf.len() * size_of::<usize>()`.
+pub fn build_stride_chain(
+    buf: &mut [usize],
+    range: usize,
+    stride: usize,
+    rng: &mut Xoshiro256StarStar,
+) {
+    let word_size = std::mem::size_of::<usize>();
+    assert!(
+        stride.is_multiple_of(word_size),
+        "stride ({stride}) must be a multiple of word size ({word_size})"
+    );
+    let n_positions = range / stride;
+    assert!(
+        n_positions >= 2,
+        "need at least 2 positions: range={range}, stride={stride}, n_positions={n_positions}"
+    );
+    assert!(
+        range <= std::mem::size_of_val(buf),
+        "range ({range}) exceeds buffer capacity ({})",
+        std::mem::size_of_val(buf)
+    );
+
+    let stride_words = stride / word_size;
+
+    // Create position indices [0, 1, 2, ..., n_positions-1] and shuffle.
+    let mut positions: Vec<usize> = (0..n_positions).collect();
+    fisher_yates_shuffle(&mut positions, rng);
+
+    // Rotate so that position 0 is first (chain starts at buf[0]).
+    if let Some(pos) = positions.iter().position(|&x| x == 0) {
+        positions.rotate_left(pos);
+    }
+
+    // Wire up the circular linked list.
+    // buf[positions[i] * stride_words] = positions[i+1] * stride_words
+    for i in 0..positions.len() - 1 {
+        buf[positions[i] * stride_words] = positions[i + 1] * stride_words;
+    }
+    // Close the cycle: last → first.
+    buf[positions[positions.len() - 1] * stride_words] = positions[0] * stride_words;
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
 
@@ -569,6 +632,106 @@ mod tests {
                 );
             }
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // build_stride_chain
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn stride_chain_is_hamiltonian_cycle() {
+        let ws = std::mem::size_of::<usize>();
+        // Test various (range, stride) combinations including non-power-of-2.
+        let test_cases: Vec<(usize, usize)> = vec![
+            (1024, 8),     // stride = word size
+            (1024, 64),    // 16 positions
+            (4096, 64),    // 64 positions
+            (4096, 512),   // 8 positions
+            (768, 64),     // non-power-of-2 range: 12 positions
+            (1280, 64),    // non-power-of-2 range: 20 positions
+            (3072, 256),   // non-power-of-2 range: 12 positions
+            (65536, 4096), // large stride: 16 positions
+        ];
+
+        for (range, stride) in test_cases {
+            let n_elements = range / ws;
+            let n_positions = range / stride;
+            let stride_words = stride / ws;
+
+            let mut buf = vec![0usize; n_elements];
+            let mut rng = Xoshiro256StarStar::new(42);
+            build_stride_chain(&mut buf, range, stride, &mut rng);
+
+            // Follow the chain starting at index 0, visiting stride-spaced positions.
+            let mut visited = vec![false; n_positions];
+            let mut idx = 0usize; // index into buf (in words)
+            let mut count = 0usize;
+            loop {
+                let pos = idx / stride_words;
+                assert!(
+                    pos < n_positions,
+                    "range={range} stride={stride}: out-of-bounds position {pos}"
+                );
+                assert!(
+                    !visited[pos],
+                    "range={range} stride={stride}: revisits position {pos}"
+                );
+                visited[pos] = true;
+                count += 1;
+                idx = buf[idx];
+                if idx == 0 {
+                    break;
+                }
+            }
+            assert_eq!(
+                count, n_positions,
+                "range={range} stride={stride}: visited {count}/{n_positions} positions"
+            );
+        }
+    }
+
+    #[test]
+    fn stride_chain_seed_sensitivity() {
+        let ws = std::mem::size_of::<usize>();
+        let range = 65536;
+        let stride = 64;
+        let n_elements = range / ws;
+        let stride_words = stride / ws;
+
+        let build_order = |seed: u64| -> Vec<usize> {
+            let mut buf = vec![0usize; n_elements];
+            let mut rng = Xoshiro256StarStar::new(seed);
+            build_stride_chain(&mut buf, range, stride, &mut rng);
+
+            let mut order = Vec::new();
+            let mut idx = 0usize;
+            loop {
+                order.push(idx / stride_words);
+                idx = buf[idx];
+                if idx == 0 {
+                    break;
+                }
+            }
+            order
+        };
+
+        let order_a = build_order(42);
+        let order_b = build_order(123);
+        assert_ne!(
+            order_a, order_b,
+            "different seeds should produce different traversal orders"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "need at least 2 positions")]
+    fn stride_chain_rejects_single_position() {
+        let ws = std::mem::size_of::<usize>();
+        let range = 64;
+        let stride = 64;
+        let mut buf = vec![0usize; range / ws];
+        let mut rng = Xoshiro256StarStar::new(42);
+        build_stride_chain(&mut buf, range, stride, &mut rng);
     }
 
     #[test]

@@ -23,7 +23,10 @@
 - [x] Fix oracle: read `scaling_cur_freq` instead of `scaling_max_freq` for CPU frequency
 - [x] Fix chain_seed_sensitivity test: use larger range (65536) so Fisher-Yates diverges across seeds
 - [x] Fix pointer_chase_l2_slower_than_l1 test: use 2×L2 spill range, pin thread, increase best-of-N reps
-- [ ] Implement cache latency 2D sweep (§11.1)
+- [x] Implement cache latency 2D sweep (§11.1)
+- [x] Add build_stride_chain for non-power-of-2 range/stride combinations
+- [x] Wire cache_2d_sweep into orchestrator
+- [x] Fix clippy: use std::mem::size_of_val instead of manual slice size calculation
 - [ ] Implement cache boundary detection — hybrid X-Ray + plateau/jump (§11.2)
 - [ ] Implement cache line size detection (§11.2)
 - [ ] Implement page coloring mitigation (§11.3)

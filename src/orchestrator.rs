@@ -3,6 +3,7 @@
 /// Drives the measurement sequence, wires platform initialisation into the
 /// timer/kernel infrastructure, and collects results into
 /// [`ResonanceResults`](crate::results::ResonanceResults).
+use crate::analysis::cache;
 use crate::arch;
 use crate::constants;
 use crate::platform;
@@ -181,11 +182,40 @@ pub fn run(config: &Config) -> Result<ResonanceResults, OrchestratorError> {
     }
 
     // ------------------------------------------------------------------
-    // 3–8. Measurement phases (to be implemented)
+    // 3. Cache latency 2D sweep (§11.1)
     // ------------------------------------------------------------------
-    // The remaining phases (cache sweep, cache analysis, TLB sweep,
-    // TLB analysis, bandwidth sweep, MLP sweep) will be added in
-    // subsequent implementation phases.  For now the fields are None.
+    let max_range = config
+        .max_mem_bytes
+        .unwrap_or_else(cache::default_max_range);
+
+    log.log(format!(
+        "cache 2D sweep: max_range={} ({:.1} MiB), trials={}, seed={}",
+        max_range,
+        max_range as f64 / (1024.0 * 1024.0),
+        config.trials,
+        config.seed,
+    ));
+
+    let sweep_matrix = cache::cache_2d_sweep(mintime_ns, config.trials, max_range, config.seed);
+
+    log.log(format!(
+        "cache 2D sweep complete: {} ranges × {} strides",
+        sweep_matrix.n_ranges(),
+        sweep_matrix.n_strides(),
+    ));
+
+    if config.verbose {
+        log.log(format!("raw sweep matrix:\n{sweep_matrix}"));
+    }
+
+    // ------------------------------------------------------------------
+    // 4–8. Remaining phases (to be implemented)
+    // ------------------------------------------------------------------
+    // Cache boundary detection (§11.2), TLB sweep (§12), bandwidth (§13),
+    // MLP (§15) will be added in subsequent implementation phases.
+    // The raw sweep_matrix is available for analysis; `cache: None` stays
+    // in results until §11.2 (boundary detection) is implemented.
+    let _ = &sweep_matrix; // suppress unused warning until §11.2
 
     let end_ns = platform::clock_ns();
     let duration_ms = (end_ns - start_ns) / 1_000_000;

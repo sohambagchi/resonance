@@ -1,0 +1,39 @@
+## 2026-04-08
+
+- [x] Set up project structure (Cargo.toml, module tree)
+- [x] Implement constants (§19 algorithmic parameters)
+- [x] Implement xoshiro256** PRNG (vendored, no external crate)
+- [x] Implement Platform layer — Linux: clock_ns, pin_thread_to_core, lock_memory, page_size, available_memory_bytes, cpu_freq_os_ghz
+- [x] Implement AlignedBuffer (posix_memalign + mmap paths)
+- [x] Implement pre_touch, anti_aliased_views, build_chain (Fisher-Yates + bit-reversal)
+- [x] Implement timer infrastructure (granularity calibration, adaptive iteration, best-of-N)
+- [x] Implement pointer-chase latency kernel (100-unrolled, throughput + delay passes)
+- [x] Implement LCG random-read kernel with baseline measurement
+- [x] Implement generic fallback bandwidth kernels (seq_read, seq_write, seq_copy, seq_fill)
+- [x] Implement x86-64 inline asm: CPU frequency estimation + AVX2 seq_read
+- [x] Implement sysfs oracle for cache/CPU ground-truth
+- [x] Implement result data model structs (serde derives)
+- [x] Implement orchestrator skeleton (platform init + timer cal + CPU freq)
+- [x] Implement CLI (clap derive, all flags from §18)
+- [x] Implement oracle-based integration tests
+- [x] Implement buffer unit tests
+- [x] Fix clippy: convert module-level `///` to `//!` inner doc comments (kernels/mod, platform/mod, rng)
+- [x] Fix clippy: replace `% == 0` with `is_multiple_of()` in buffer.rs
+- [x] Fix unused variable warning in kernels/latency.rs test
+- [x] Fix oracle: read `scaling_cur_freq` instead of `scaling_max_freq` for CPU frequency
+- [x] Fix chain_seed_sensitivity test: use larger range (65536) so Fisher-Yates diverges across seeds
+- [x] Fix pointer_chase_l2_slower_than_l1 test: use 2×L2 spill range, pin thread, increase best-of-N reps
+- [ ] Implement cache latency 2D sweep (§11.1)
+- [ ] Implement cache boundary detection — hybrid X-Ray + plateau/jump (§11.2)
+- [ ] Implement cache line size detection (§11.2)
+- [ ] Implement page coloring mitigation (§11.3)
+- [ ] Implement TLB sweep and boundary detection (§12)
+- [ ] Implement bandwidth sweep with ISA-specific kernels (§13)
+- [ ] Implement MLP multi-chain measurement (§15)
+- [ ] Implement human-readable terminal output formatting (§17.1)
+- [ ] Implement confidence scoring (§16.2)
+- [ ] Add macOS platform implementation
+- [ ] Add Windows platform implementation
+- [ ] Add AArch64 architecture kernels (NEON / SVE)
+- [ ] Add AVX-512 bandwidth kernels
+- [ ] Add non-temporal write/copy kernels
